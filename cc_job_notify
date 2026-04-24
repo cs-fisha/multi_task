@@ -1,0 +1,28 @@
+#!/usr/bin/env python3
+from __future__ import annotations
+
+import argparse
+import sys
+from pathlib import Path
+
+BASE_DIR = Path(__file__).resolve().parent
+if str(BASE_DIR) not in sys.path:
+    sys.path.insert(0, str(BASE_DIR))
+
+from lib.notify import notify_from_job_dir
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser(description="Send a completion or failure notification for a job.")
+    parser.add_argument("job_id")
+    args = parser.parse_args()
+    job_dir = BASE_DIR / "jobs" / args.job_id
+    if not job_dir.exists():
+        print(f"job not found: {args.job_id}", file=sys.stderr)
+        return 1
+    notify_from_job_dir(job_dir)
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

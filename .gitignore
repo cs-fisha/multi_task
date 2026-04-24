@@ -1,0 +1,35 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Runtime artifacts
+jobs/
+locks/
+*.log
+*.out
+*.pid
+
+# Local metadata
+.claude/
+.vscode/
+.idea/
+
+# Local notes
+TASK_HANDOFF.md
+要求.md
+info.md
+
+# Sensitive local inventory
+hosts.txt
+
+# Environment / credentials
+.env
+.env.*
+*.key
+*.pem
+
+# OS files
+.DS_Store
+Thumbs.db

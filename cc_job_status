@@ -1,0 +1,34 @@
+#!/usr/bin/env python3
+from __future__ import annotations
+
+import argparse
+import json
+import sys
+from pathlib import Path
+
+BASE_DIR = Path(__file__).resolve().parent
+if str(BASE_DIR) not in sys.path:
+    sys.path.insert(0, str(BASE_DIR))
+
+from lib.status_io import load_status, summarize_status
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser(description="Read the current status for a multi_task job.")
+    parser.add_argument("job_id")
+    args = parser.parse_args()
+    job_dir = BASE_DIR / "jobs" / args.job_id
+    if not job_dir.exists():
+        print(json.dumps({"error": f"job not found: {args.job_id}"}, ensure_ascii=False), file=sys.stderr)
+        return 1
+    try:
+        payload = summarize_status(load_status(job_dir))
+    except Exception as exc:
+        print(json.dumps({"error": str(exc)}, ensure_ascii=False), file=sys.stderr)
+        return 1
+    print(json.dumps(payload, indent=2, ensure_ascii=False))
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

@@ -1,0 +1,99 @@
+#!/usr/bin/env python3
+from __future__ import annotations
+
+import argparse
+import os
+import sys
+import time
+from pathlib import Path
+
+BASE_DIR = Path(__file__).resolve().parent
+if str(BASE_DIR) not in sys.path:
+    sys.path.insert(0, str(BASE_DIR))
+
+from lib.gpu_utils import refresh_gpu_lock
+from lib.scheduler import finalize_job, sync_remote_to_local
+from lib.status_io import TERMINAL_STATES, load_status, now_iso, update_state
+
+
+def _pid_alive(pid: int | None) -> bool:
+    if not pid:
+        return False
+    try:
+        os.kill(pid, 0)
+    except ProcessLookupError:
+        return False
+    except PermissionError:
+        return True
+    return True
+
+
+def _read_exit_code(job_dir: Path) -> int | None:
+    path = job_dir / "exit_code"
+    if not path.exists():
+        return None
+    try:
+        return int(path.read_text(encoding="utf-8").strip())
+    except ValueError:
+        return None
+
+
+def _read_log_tail(log_path: Path) -> str:
+    if not log_path.exists():
+        return "command failed"
+    lines = log_path.read_text(encoding="utf-8", errors="replace").splitlines()
+    return lines[-1] if lines else "command failed"
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser(description="Wait for a multi_task job to finish.")
+    parser.add_argument("job_id")
+    parser.add_argument("--timeout", type=int, default=0)
+    parser.add_argument("--poll-interval", type=int, default=15)
+    parser.add_argument("--monitor-local", action="store_true")
+    parser.add_argument("--monitor-remote", action="store_true")
+    args = parser.parse_args()
+
+    job_dir = BASE_DIR / "jobs" / args.job_id
+    if not job_dir.exists():
+        print(f"job not found: {args.job_id}", file=sys.stderr)
+        return 1
+
+    start = time.time()
+    while True:
+        status = load_status(job_dir)
+        if status.get("gpu_lock_path"):
+            refresh_gpu_lock(status.get("gpu_lock_path"), state=status.get("state"), worker_pid=status.get("pid"), worker_host=status.get("host"))
+        if args.monitor_remote:
+            status = sync_remote_to_local(job_dir)
+        elif args.monitor_local and status["state"] == "running":
+            pid = status.get("pid")
+            if _pid_alive(pid):
+                update_state(job_dir, state="running")
+                status = load_status(job_dir)
+            else:
+                exit_code = _read_exit_code(job_dir)
+                if exit_code == 0:
+                    update_state(job_dir, state="succeeded", ended_at=now_iso(), exit_code=0, error_message="")
+                else:
+                    update_state(
+                        job_dir,
+                        state="failed",
+                        ended_at=now_iso(),
+                        exit_code=exit_code or 1,
+                        error_message=status.get("error_message") or _read_log_tail(Path(status["log_path"])),
+                    )
+                status = load_status(job_dir)
+        if status["state"] in TERMINAL_STATES:
+            status = finalize_job(job_dir)
+            print(f"SUMMARY_PATH={status.get('summary_path', '')}")
+            print(f"METRICS_PATH={status.get('metrics_path', '')}")
+            return 0 if status["state"] == "succeeded" else 1
+        if args.timeout and time.time() - start > args.timeout:
+            print(f"timeout waiting for job {args.job_id}", file=sys.stderr)
+            return 1
+        time.sleep(max(args.poll_interval, 1))
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
