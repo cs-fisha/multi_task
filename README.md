@@ -1,5 +1,7 @@
 # multi_task
 
+中文说明见 [README_zh.md](README_zh.md)
+
 A lightweight experiment launcher for multi-GPU, multi-host research workflows.
 
 `multi_task` provides a single entrypoint for running training, evaluation, and inference jobs across local and remote GPU machines. It is designed for researchers or individual developers who want a simple, file-based workflow instead of a full cluster scheduler.
